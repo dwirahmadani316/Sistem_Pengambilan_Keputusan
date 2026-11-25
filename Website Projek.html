@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="id"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>AHP-TOPSIS</title>
+<style>
+*{box-sizing:border-box}body{margin:0;background:#f3f6fa;color:#172033;font:15px Arial,sans-serif}header{background:#17324d;color:white;padding:25px}main{max-width:1050px;margin:22px auto;padding:0 15px}.card{background:white;border:1px solid #dce4ee;border-radius:12px;padding:18px;margin:15px 0}h1{margin:0 0 7px}h2{font-size:19px;color:#17324d;margin:0 0 12px}.muted{color:#64748b;font-size:13px}button{background:#2563eb;color:white;border:0;padding:10px 15px;border-radius:7px;cursor:pointer}button.alt{background:#e8eef7;color:#17324d}input,select{padding:7px;border:1px solid #cbd5e1;border-radius:5px}table{border-collapse:collapse;width:100%;font-size:13px;margin-top:10px}td,th{border:1px solid #dce4ee;padding:8px;text-align:center}th{background:#eef3f9}td:first-child,th:first-child{text-align:left}.scroll{overflow:auto}.status{padding:10px;background:#eff6ff;border-radius:7px;margin-top:10px}.ok{background:#ecfdf5}.err{background:#fff1f2}.kpis{display:flex;gap:10px;flex-wrap:wrap}.kpi{background:#f4f7fb;padding:12px;border-radius:8px;min-width:140px}.kpi b{display:block;font-size:20px;color:#17324d}.hidden{display:none}
+</style></head><body>
+<header><h1>AHP–TOPSIS</h1><div>Perhitungan bobot kriteria dengan AHP dan pemeringkatan alternatif dengan TOPSIS.</div></header>
+<main>
+<section class="card"><h2>1. Unggah dataset CSV</h2><p class="muted">Unggah Dataset CSV</p><input id="file" type="file" accept=".csv"><button id="load">Baca dataset</button><div id="filemsg" class="status">Belum ada dataset.</div></section>
+<section class="card"><h2>2. Kriteria penelitian</h2><p class="muted">Periksa nama kolom CSV dan arah kriteria. Benefit berarti nilai besar lebih baik; cost berarti nilai kecil lebih baik.</p><div class="scroll"><table id="ct"><thead><tr><th>Kode</th><th>Kriteria</th><th>Kolom CSV</th><th>Arah</th></tr></thead><tbody></tbody></table></div></section>
+<section class="card"><h2>3. Matriks perbandingan AHP</h2><p class="muted">Ubah nilai sesuai penilaian/Acuan penelitian. Diagonal bernilai 1 dan nilai kebalikan diperbarui otomatis. Matriks awal di bawah hanya contoh, verifikasi sebelum digunakan.</p><button class="alt" id="reset">Muat matriks contoh</button><div id="matrix" class="scroll"></div></section>
+<section class="card"><h2>4. Hitung AHP + TOPSIS</h2><button id="run">Jalankan perhitungan</button><div id="msg" class="status">Unggah CSV terlebih dahulu.</div></section>
+<section id="out" class="hidden">
+<div class="card"><h2>5. Hasil AHP</h2><div id="kpis" class="kpis"></div><div id="weights" class="scroll"></div></div>
+<div class="card"><h2>6. Matriks keputusan</h2><div id="decision" class="scroll"></div></div>
+<div class="card"><h2>7. Hasil TOPSIS dan peringkat</h2><div id="ranking" class="scroll"></div><p><button id="csv">Unduh peringkat CSV</button></p></div>
+</section><p class="muted" style="text-align:center">AHP–TOPSIS sederhana. Interpretasi hasil perlu mempertimbangkan validitas data, arah kriteria, dan konsistensi matriks AHP.</p>
+</main>
+<script>
+const C=[
+['C1','Skor kecemasan akademik','skor_kecemasan_akademik','benefit'],
+['C2','Skor tekanan finansial','skor_tekanan_finansial','benefit'],
+['C3','Skor tekanan masa depan karir','skor_tekanan_masa_depan_karir','benefit'],
+['C4','Skor kesepian dan isolasi sosial','skor_kesepian_dan_isolasi_sosial','benefit'],
+['C5','Frekuensi keluhan somatik mingguan','frekuensi_keluhan_somatik_mingguan','benefit'],
+['C6','Durasi tidur harian (jam)','durasi_tidur_harian_jam','cost'],
+['C7','Skor resiliensi psikologis','skor_resiliensi_psikologis','cost']];
+const ALT='jenjang_dan_rumpun_studi';
+const sample=[[1,1,2,1,1,2,1],[1,1,1,1,1,1,1],[.5,1,1,1,1,1,1],[1,1,1,1,1,1,1],[1,1,1,1,1,1,1],[.5,1,1,1,1,1,1],[1,1,1,1,1,1,1]];
+let A=sample.map(x=>x.slice()),data=[],headers=[],result=null;
+const $=x=>document.getElementById(x),fmt=x=>Number(x).toFixed(6);
+function esc(x){return String(x??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
+function renderC(){$('ct').querySelector('tbody').innerHTML=C.map((c,i)=>`<tr><td>${c[0]}</td><td>${c[1]}</td><td><input data-col="${i}" value="${c[2]}" style="min-width:220px;width:100%"></td><td><select data-type="${i}"><option value="benefit" ${c[3]==='benefit'?'selected':''}>Benefit</option><option value="cost" ${c[3]==='cost'?'selected':''}>Cost</option></select></td></tr>`).join('');}
+function renderA(){let s='<table><tr><th>Kriteria</th>'+C.map(c=>`<th>${c[0]}</th>`).join('')+'</tr>';A.forEach((r,i)=>{s+=`<tr><th>${C[i][0]}</th>`+r.map((v,j)=>`<td><input ${i===j?'disabled':''} data-i="${i}" data-j="${j}" value="${v}" style="width:65px"></td>`).join('')+'</tr>'});$('matrix').innerHTML=s+'</table>';$('matrix').querySelectorAll('input').forEach(e=>e.onchange=()=>{let i=+e.dataset.i,j=+e.dataset.j,v=Number(e.value);if(!(v>0)){alert('Nilai harus lebih besar dari 0');renderA();return}A[i][j]=v;A[j][i]=1/v;renderA()})}
+renderC();renderA();$('reset').onclick=()=>{A=sample.map(x=>x.slice());renderA()};
+function parseCSV(t){let first=t.split(/\r?\n/)[0]||'',d=(first.match(/;/g)||[]).length>=(first.match(/,/g)||[]).length?';':',',out=[],row=[],v='',q=false;for(let i=0;i<t.length;i++){let c=t[i];if(c==='"'){if(q&&t[i+1]==='"'){v+='"';i++}else q=!q}else if(c===d&&!q){row.push(v);v=''}else if((c==='\n'||c==='\r')&&!q){if(c==='\r'&&t[i+1]==='\n')i++;row.push(v);if(row.some(x=>x.trim()))out.push(row);row=[];v=''}else v+=c}row.push(v);if(row.some(x=>x.trim()))out.push(row);let h=out.shift().map(x=>x.trim().replace(/^\uFEFF/,''));return {h,rows:out.map(r=>Object.fromEntries(h.map((k,i)=>[k,(r[i]||'').trim()]))) }}
+$('load').onclick=async()=>{let f=$('file').files[0];if(!f){$('filemsg').textContent='Pilih file CSV.';return}try{let p=parseCSV(await f.text());headers=p.h;data=p.rows;let missing=[ALT,...C.map(c=>document.querySelector(`[data-col="${C.indexOf(c)}"]`).value)].filter(x=>!headers.includes(x));if(missing.length)throw Error('Kolom tidak ditemukan: '+missing.join(', '));$('filemsg').className='status ok';$('filemsg').textContent=`Dataset terbaca: ${data.length} baris, ${headers.length} kolom.`}catch(e){$('filemsg').className='status err';$('filemsg').textContent=e.message}};
+function table(head,body){return '<table><tr>'+head.map(x=>`<th>${x}</th>`).join('')+'</tr>'+body.map(r=>'<tr>'+r.map(x=>`<td>${x}</td>`).join('')+'</tr>').join('')+'</table>'}
+$('run').onclick=()=>{
+try{
+if(!data.length)throw Error('Unggah dataset CSV terlebih dahulu.');
+C.forEach((c,i)=>{c[2]=document.querySelector(`[data-col="${i}"]`).value.trim();c[3]=document.querySelector(`[data-type="${i}"]`).value;if(!headers.includes(c[2]))throw Error('Kolom '+c[2]+' tidak ditemukan.')});
+let g=new Map();data.forEach(r=>{let n=r[ALT],v=C.map(c=>Number(String(r[c[2]]).replace(',','.')));if(!n||v.some(x=>!Number.isFinite(x)))return;if(!g.has(n))g.set(n,{s:Array(7).fill(0),n:0});let x=g.get(n);v.forEach((z,i)=>x.s[i]+=z);x.n++});
+let names=[...g.keys()].sort();if(names.length<2)throw Error('Minimal dua alternatif dengan data numerik lengkap diperlukan.');
+let X=names.map(n=>g.get(n).s.map(x=>x/g.get(n).n)),cs=C.map((_,j)=>A.reduce((s,r)=>s+r[j],0)),N=A.map(r=>r.map((v,j)=>v/cs[j])),w=N.map(r=>r.reduce((s,x)=>s+x,0)/7),Aw=A.map(r=>r.reduce((s,x,j)=>s+x*w[j],0)),lm=Aw.reduce((s,x,i)=>s+x/w[i],0)/7,CI=(lm-7)/6,CR=CI/1.32;
+let den=C.map((_,j)=>Math.sqrt(X.reduce((s,r)=>s+r[j]**2,0))),R=X.map(r=>r.map((v,j)=>v/den[j])),Y=R.map(r=>r.map((v,j)=>v*w[j])),pos=C.map((c,j)=>c[3]==='benefit'?Math.max(...Y.map(r=>r[j])):Math.min(...Y.map(r=>r[j]))),neg=C.map((c,j)=>c[3]==='benefit'?Math.min(...Y.map(r=>r[j])):Math.max(...Y.map(r=>r[j])));
+let rank=names.map((n,i)=>{let dp=Math.sqrt(Y[i].reduce((s,v,j)=>s+(v-pos[j])**2,0)),dm=Math.sqrt(Y[i].reduce((s,v,j)=>s+(v-neg[j])**2,0));return {n,dp,dm,v:dm/(dp+dm),count:g.get(n).n}}).sort((a,b)=>b.v-a.v);
+result=rank;$('out').classList.remove('hidden');$('msg').className='status ok';$('msg').textContent='Perhitungan selesai. CR < 0,10 umumnya menunjukkan konsistensi yang dapat diterima; periksa kembali acuan metodologi penelitian.';
+$('kpis').innerHTML=[['Lambda maks',lm],['CI',CI],['CR',CR]].map(x=>`<div class="kpi"><span class="muted">${x[0]}</span><b>${fmt(x[1])}</b></div>`).join('');
+$('weights').innerHTML=table(['Kode','Kriteria','Bobot'],C.map((c,i)=>[c[0],c[1],fmt(w[i])]));
+$('decision').innerHTML=table(['Alternatif',...C.map(c=>c[0])],names.map((n,i)=>[esc(n),...X[i].map(fmt)]));
+$('ranking').innerHTML=table(['Peringkat','Alternatif','D+','D−','Nilai preferensi','Jumlah responden'],rank.map((r,i)=>[i+1,esc(r.n),fmt(r.dp),fmt(r.dm),fmt(r.v),r.count]));
+}catch(e){$('msg').className='status err';$('msg').textContent=e.message}
+};
+$('csv').onclick=()=>{if(!result)return;let s=[['Peringkat','Alternatif','D_plus','D_min','Nilai_preferensi','Jumlah_responden'],...result.map((r,i)=>[i+1,r.n,r.dp,r.dm,r.v,r.count])].map(r=>r.map(x=>'"'+String(x).replace(/"/g,'""')+'"').join(';')).join('\r\n');let a=document.createElement('a'),u=URL.createObjectURL(new Blob(['\uFEFF'+s],{type:'text/csv;charset=utf-8'}));a.href=u;a.download='Hasil_Peringkat_TOPSIS.csv';a.click();URL.revokeObjectURL(u)};
+</script></body></html>
